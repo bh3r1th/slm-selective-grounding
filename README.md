@@ -30,8 +30,9 @@ python scripts/06_train_dpo.py
 python scripts/07_eval.py
 ```
 
-Set `dry_run: true` in `configs/datasets.yaml` to download 10 examples per dataset and
-build a tiny corpus.
+The default dataset config pulls Gemma 3 1B IDs and Hugging Face datasets listed in
+`configs/default.yaml`, with `dry_run: true` to download 10 examples per dataset. Set
+`dry_run: false` in `configs/datasets.yaml` to download the full splits.
 
 ## CLI
 

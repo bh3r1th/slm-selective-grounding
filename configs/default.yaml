@@ -1,2 +1,49 @@
 project: slm-selective-grounding
 seed: 42
+
+models:
+  base_model_id: google/gemma-3-1b-pt
+  it_model_id: google/gemma-3-1b-it
+
+dry_run: true
+
+datasets:
+  - id: princeton-nlp/ALCE-data
+    config_name: asqa
+    split: train
+    n_examples: 10
+    text_fields:
+      query: question
+      answer: answer
+      docs: docs
+      citations: citations
+  - id: princeton-nlp/ALCE-data
+    config_name: qampari
+    split: train
+    n_examples: 10
+    text_fields:
+      query: question
+      answers: answers
+  - id: din0s/asqa
+    config_name: null
+    split: train
+    n_examples: 10
+    text_fields:
+      query: question
+      long_answer: long_answer
+      docs: docs
+  - id: iohadrubin/qampari
+    config_name: null
+    split: train
+    n_examples: 10
+    text_fields:
+      query: question
+      answers: answers
+  - id: fever/fever
+    config_name: null
+    split: train
+    n_examples: 10
+    text_fields:
+      claim: claim
+      label: label
+      evidence: evidence

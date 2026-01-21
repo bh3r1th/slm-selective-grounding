@@ -1,140 +1,124 @@
 from __future__ import annotations
 
+import json
+import logging
 from pathlib import Path
-from typing import Any, Iterable, Mapping
+from typing import Any, Mapping
 
-from slm_selective_grounding.datasets.schema import Document, Example
+from slm_selective_grounding.datasets.schema import normalize_example
+from slm_selective_grounding.utils.io import ensure_dir
 from slm_selective_grounding.utils.pipeline import config_to_dict, write_json
 
 
-ALCE_DATASET = "tatsu-lab/alce"
-FEVER_DATASET = "fever"
+def _sanitize_dataset_id(dataset_id: str) -> str:
+    return dataset_id.replace("/", "__")
 
 
-def _get_first(example: Mapping[str, Any], keys: Iterable[str]) -> Any | None:
-    for key in keys:
-        if key in example:
-            return example[key]
-    return None
+def _write_jsonl(path: Path, rows: list[Mapping[str, Any]]) -> None:
+    ensure_dir(path.parent)
+    with path.open("w", encoding="utf-8") as handle:
+        for row in rows:
+            handle.write(json.dumps(row, sort_keys=True))
+            handle.write("\n")
 
 
-def _normalize_docs(raw_docs: Any) -> list[Document]:
-    docs: list[Document] = []
-    if not raw_docs:
-        return docs
-    if isinstance(raw_docs, Mapping):
-        raw_docs = [raw_docs]
-    for idx, raw_doc in enumerate(raw_docs):
-        if not isinstance(raw_doc, Mapping):
-            continue
-        doc_id = str(raw_doc.get("doc_id") or raw_doc.get("id") or idx)
-        title = str(raw_doc.get("title") or raw_doc.get("source") or "")
-        text = str(raw_doc.get("text") or raw_doc.get("content") or "")
-        docs.append(Document(doc_id=doc_id, title=title, text=text))
-    return docs
-
-
-def _normalize_alce(example: Mapping[str, Any], dataset_name: str) -> Example:
-    query = _get_first(example, ["question", "query", "prompt", "instruction"]) or ""
-    gold_answer = _get_first(example, ["answer", "output", "reference_answer"])
-    docs = _normalize_docs(_get_first(example, ["docs", "documents", "contexts", "ctxs"]))
-    metadata = {
-        "dataset": dataset_name,
-        "id": _get_first(example, ["id", "example_id"]),
-    }
-    return Example(
-        query=str(query),
-        gold_answer=str(gold_answer) if gold_answer is not None else None,
-        gold_claims=None,
-        docs=docs,
-        metadata=metadata,
-    )
-
-
-def _normalize_fever(example: Mapping[str, Any]) -> Example:
-    claim = _get_first(example, ["claim", "query", "text"]) or ""
-    evidence = _get_first(example, ["evidence", "evidence_sentences", "evidence_sets"])
-    metadata = {
-        "dataset": "fever",
-        "id": _get_first(example, ["id", "example_id"]),
-        "label": _get_first(example, ["label", "verdict"]),
-        "evidence": evidence,
-    }
-    return Example(
-        query=str(claim),
-        gold_answer=None,
-        gold_claims=None,
-        docs=[],
-        metadata=metadata,
-    )
-
-
-def _load_dataset(name: str, split: str, subset: str | None, limit: int | None) -> list[Mapping[str, Any]]:
+def _load_dataset(
+    dataset_id: str,
+    config_name: str | None,
+    split: str,
+    limit: int | None,
+) -> list[Mapping[str, Any]]:
     from datasets import load_dataset
 
-    dataset_kwargs = {"split": split}
-    if subset is not None:
-        dataset = load_dataset(name, subset, **dataset_kwargs)
-    else:
-        dataset = load_dataset(name, **dataset_kwargs)
+    dataset = load_dataset(dataset_id, config_name, split=split)
     if limit is not None:
         dataset = dataset.select(range(min(limit, len(dataset))))
     return [dict(row) for row in dataset]
+
+
+def _parse_dataset_entry(entry: Mapping[str, Any]) -> dict[str, Any]:
+    dataset_id = entry.get("id")
+    if not dataset_id:
+        raise ValueError("Each dataset entry must include an id")
+    config_name = entry.get("config_name")
+    split = entry.get("split") or "train"
+    n_examples = entry.get("n_examples")
+    text_fields = entry.get("text_fields")
+    return {
+        "dataset_id": str(dataset_id),
+        "config_name": str(config_name) if config_name is not None else None,
+        "split": str(split),
+        "n_examples": int(n_examples) if n_examples is not None else None,
+        "text_fields": dict(text_fields) if isinstance(text_fields, Mapping) else None,
+    }
 
 
 def download_datasets(
     config: Mapping[str, Any],
     output_path: Path,
     run_id: str,
+    output_root: Path | None = None,
 ) -> Path:
     """Download datasets from Hugging Face and normalize to a unified schema."""
+    logger = logging.getLogger(__name__)
     if config.__class__.__name__ == "DictConfig":
         config_payload = config_to_dict(config)  # type: ignore[arg-type]
     else:
         config_payload = dict(config)
 
-    datasets_cfg = config_payload.get(
-        "datasets",
-        [
-            {"name": "alce_asqa"},
-            {"name": "alce_qampari"},
-            {"name": "fever"},
-        ],
-    )
+    datasets_cfg = config_payload.get("datasets", [])
     if not isinstance(datasets_cfg, list):
         raise ValueError("datasets must be a list")
     dry_run = bool(config_payload.get("dry_run", False))
-    limit = 10 if dry_run else None
+    output_root = output_root or Path("data") / "raw"
 
-    normalized: dict[str, list[dict[str, Any]]] = {}
+    manifest_entries: list[dict[str, Any]] = []
     for entry in datasets_cfg:
         if not isinstance(entry, Mapping):
             raise ValueError("datasets entries must be mappings")
-        name = str(entry.get("name"))
-        if name == "alce_asqa":
-            raw_rows = _load_dataset(ALCE_DATASET, split="train", subset="asqa", limit=limit)
-            normalized[name] = [
-                _normalize_alce(row, dataset_name=name).to_dict() for row in raw_rows
-            ]
-        elif name == "alce_qampari":
-            raw_rows = _load_dataset(
-                ALCE_DATASET, split="train", subset="qampari", limit=limit
-            )
-            normalized[name] = [
-                _normalize_alce(row, dataset_name=name).to_dict() for row in raw_rows
-            ]
-        elif name == "fever":
-            raw_rows = _load_dataset(FEVER_DATASET, split="train", subset=None, limit=limit)
-            normalized[name] = [_normalize_fever(row).to_dict() for row in raw_rows]
-        else:
-            raise ValueError(f"Unsupported dataset: {name}")
+        parsed = _parse_dataset_entry(entry)
+        dataset_id = parsed["dataset_id"]
+        config_name = parsed["config_name"]
+        split = parsed["split"]
+        n_examples = parsed["n_examples"]
+        limit = n_examples if dry_run else None
+        if dry_run and limit is None:
+            limit = 10
+
+        raw_rows = _load_dataset(dataset_id, config_name, split=split, limit=limit)
+        normalized_rows: list[Mapping[str, Any]] = []
+        for row in raw_rows:
+            example = normalize_example(row, dataset_id, config_name, split)
+            if parsed["text_fields"] is not None:
+                example = example.with_metadata(text_fields=parsed["text_fields"])
+            normalized_rows.append(example.to_dict())
+
+        dataset_dir = output_root / _sanitize_dataset_id(dataset_id)
+        dataset_path = dataset_dir / f"{split}.jsonl"
+        _write_jsonl(dataset_path, normalized_rows)
+
+        logger.info(
+            "dataset_id=%s config_name=%s split=%s row_count=%s",
+            dataset_id,
+            config_name,
+            split,
+            len(normalized_rows),
+        )
+        manifest_entries.append(
+            {
+                "dataset_id": dataset_id,
+                "config_name": config_name,
+                "split": split,
+                "row_count": len(normalized_rows),
+                "path": str(dataset_path),
+            }
+        )
 
     payload = {
         "run_id": run_id,
         "status": "ok",
         "dry_run": dry_run,
-        "datasets": normalized,
+        "datasets": manifest_entries,
     }
     write_json(output_path, payload)
     return output_path
-
