@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+from pathlib import Path
 
 from slm_selective_grounding.datasets.hf_download import download_datasets
 from slm_selective_grounding.logging import configure_logging
@@ -25,7 +26,8 @@ def main() -> None:
     log_run_start(logger, run_id)
 
     output_path = build_output_path("data", "datasets", run_id)
-    download_datasets(config, output_path, run_id)
+    output_root = Path("data") / "raw"
+    download_datasets(config, output_path, run_id, output_root=output_root)
 
 
 if __name__ == "__main__":
