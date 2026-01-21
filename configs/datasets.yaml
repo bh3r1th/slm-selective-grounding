@@ -1,0 +1,11 @@
+defaults:
+  - default
+
+datasets:
+  - name: alce_asqa
+  - name: alce_qampari
+  - name: fever
+
+dry_run: false
+passage_tokens: 200
+passage_stride: 0
