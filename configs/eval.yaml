@@ -1,0 +1,4 @@
+eval:
+  metrics:
+    - faithfulness
+    - coverage
