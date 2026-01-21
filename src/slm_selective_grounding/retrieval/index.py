@@ -1,10 +1,24 @@
 from __future__ import annotations
 
-from slm_selective_grounding.retrieval.bm25 import build_bm25_index
-from slm_selective_grounding.retrieval.dense import build_dense_index
+from pathlib import Path
+from typing import Any, Mapping
+
+from slm_selective_grounding.utils.pipeline import write_json
 
 
-def build_indexes() -> None:
+def build_indexes(
+    config: Mapping[str, Any],
+    output_path: Path,
+    run_id: str,
+) -> Path:
     """Build all retrieval indexes (placeholder)."""
-    build_bm25_index()
-    build_dense_index()
+    retriever_cfg = dict(config.get("retriever", {}))
+    if "type" not in retriever_cfg:
+        raise ValueError("retriever.type is required")
+    payload = {
+        "run_id": run_id,
+        "status": "placeholder",
+        "retriever": retriever_cfg,
+    }
+    write_json(output_path, payload)
+    return output_path
