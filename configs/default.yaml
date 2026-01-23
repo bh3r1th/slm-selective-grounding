@@ -5,45 +5,36 @@ models:
   base_model_id: google/gemma-3-1b-pt
   it_model_id: google/gemma-3-1b-it
 
-dry_run: true
+dry_run: false
 
 datasets:
-  - id: princeton-nlp/ALCE-data
-    config_name: asqa
-    split: train
-    n_examples: 10
-    text_fields:
-      query: question
-      answer: answer
-      docs: docs
-      citations: citations
-  - id: princeton-nlp/ALCE-data
-    config_name: qampari
-    split: train
-    n_examples: 10
-    text_fields:
-      query: question
-      answers: answers
-  - id: din0s/asqa
+  - id: "princeton-nlp/ALCE-data"
     config_name: null
-    split: train
+    split: "train"
     n_examples: 10
-    text_fields:
-      query: question
-      long_answer: long_answer
-      docs: docs
-  - id: iohadrubin/qampari
+  - id: "din0s/asqa"
     config_name: null
-    split: train
+    split: "train"
     n_examples: 10
-    text_fields:
-      query: question
-      answers: answers
-  - id: fever/fever
-    config_name: null
-    split: train
-    n_examples: 10
-    text_fields:
-      claim: claim
-      label: label
-      evidence: evidence
+  # - id: "iohadrubin/qampari"
+  #   config_name: null
+  #   split: "train"
+  #   n_examples: 10
+  # - id: "fever/fever"
+  #   config_name: null
+  #   split: "train"
+  #   n_examples: 10
+
+chunking:
+  chunk_size: 384
+  overlap: 64
+
+retriever:
+  type: bm25
+
+bm25:
+  enabled: true
+  index_dir: "artifacts/indexes/bm25"
+  k1: 0.9
+  b: 0.4
+  top_k: 20

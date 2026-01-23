@@ -14,3 +14,9 @@ artifacts/runs/
 artifacts/reports/
 .env
 .DS_Store
+
+# Large artifacts
+artifacts/corpus/*.jsonl
+artifacts/corpus/*.sqlite
+artifacts/indexes/
+artifacts/contexts/*.jsonl

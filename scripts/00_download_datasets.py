@@ -6,6 +6,7 @@ from pathlib import Path
 
 from slm_selective_grounding.datasets.hf_download import download_datasets
 from slm_selective_grounding.logging import configure_logging
+from slm_selective_grounding.utils.io import ensure_dirs
 from slm_selective_grounding.utils.pipeline import (
     build_output_path,
     compute_run_id,
@@ -19,6 +20,7 @@ def main() -> None:
     parser.add_argument("--config", required=True, help="Path to Hydra config")
     args = parser.parse_args()
 
+    ensure_dirs(["data/raw"])
     configure_logging()
     logger = logging.getLogger(__name__)
     config = load_config(args.config)

@@ -74,3 +74,34 @@ def test_hf_download_dry_run(tmp_path) -> None:
     assert calls["dataset_id"] == "din0s/asqa"
     assert calls["config_name"] is None
     assert calls["split"] == "train"
+
+
+def test_hf_download_preserves_question(tmp_path) -> None:
+    def fake_load_dataset(dataset_id, config_name, split=None):
+        return DummyDataset(
+            [
+                {"question": "What is QA?", "long_answer": "Answer here."},
+            ]
+        )
+
+    _install_fake_datasets(fake_load_dataset)
+
+    config = {
+        "datasets": [
+            {
+                "id": "din0s/asqa",
+                "config_name": None,
+                "split": "train",
+                "n_examples": 1,
+            }
+        ],
+        "dry_run": True,
+    }
+    output_manifest = tmp_path / "datasets.json"
+    output_root = tmp_path / "raw"
+
+    download_datasets(config, output_manifest, run_id="run123", output_root=output_root)
+
+    expected_path = output_root / "din0s__asqa" / "train.jsonl"
+    row = json.loads(expected_path.read_text(encoding="utf-8").splitlines()[0])
+    assert "question" in row or ("query" in row and row["query"] != "?")
