@@ -249,19 +249,40 @@ def compute_answer_metrics(scores_jsonl: Path, out_jsonl: Path) -> None:
     print(f"Wrote: {out_jsonl}")
 
 
-def ground_answers_from_supported(scores_jsonl: Path, out_jsonl: Path) -> None:
+def ground_answers_from_supported(
+    scores_jsonl: Path, out_jsonl: Path, all_ids_jsonl: Path | None = None
+) -> None:
     by_id: dict[str | int, list[str]] = defaultdict(list)
     for ex in _jsonl_reader(scores_jsonl):
         if ex["label"] == "support":
             by_id[ex["id"]].append(ex["claim"])
 
+    ids: list[str | int] | None = None
+    if all_ids_jsonl is not None:
+        ids = []
+        for idx, ex in enumerate(_jsonl_reader(all_ids_jsonl)):
+            _id = _get_id(ex, idx)
+            if _id is None:
+                continue
+            ids.append(_id)
+
     with _jsonl_writer(out_jsonl) as handle:
-        for _id, claims in by_id.items():
+        rows_written = 0
+        if ids is None:
+            id_iter = by_id.items()
+        else:
+            id_iter = ((_id, by_id.get(_id, [])) for _id in ids)
+        for _id, claims in id_iter:
+            if claims:
+                answer = " ".join(claims)
+            else:
+                answer = "I don't know."
             row = {
                 "id": _id,
-                "answer": " ".join(claims),
+                "answer": answer,
                 "mode": "claim_level_grounded",
             }
             handle.write(json.dumps(row, ensure_ascii=False))
             handle.write("\n")
-    print(f"Wrote: {out_jsonl} rows: {len(by_id)}")
+            rows_written += 1
+    print(f"Wrote: {out_jsonl} rows: {rows_written}")

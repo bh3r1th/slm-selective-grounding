@@ -128,7 +128,17 @@ def run_phase5(args: argparse.Namespace) -> None:
         args.phase5_jsonl,
         Path("artifacts") / f"phase5_grounded_answers_{args.tag}.jsonl",
     )
-    ground_answers_from_supported(base_scores_path, grounded_path)
+    ground_answers_from_supported(
+        base_scores_path,
+        grounded_path,
+        all_ids_jsonl=Path(args.contexts_jsonl),
+    )
+    grounded_rows = sum(1 for _ in _jsonl_reader(grounded_path))
+    contexts_rows = sum(1 for _ in _jsonl_reader(Path(args.contexts_jsonl)))
+    print(
+        "Phase 5 grounded rows: "
+        f"{grounded_rows} (contexts: {contexts_rows})"
+    )
 
     claims_path = _resolve_path(
         args.phase5_claims_jsonl,
@@ -161,7 +171,7 @@ def run_report(args: argparse.Namespace) -> None:
             counts[ex["label"]] += 1
         return counts
 
-    def per_id_metrics(path: Path) -> dict[str, dict[str, float]]:
+    def per_id_metrics(path: Path) -> tuple[dict[str, dict[str, float]], int]:
         by_id = {}
         totals = {}
         counts = {}
@@ -180,7 +190,7 @@ def run_report(args: argparse.Namespace) -> None:
                 "irrelevant_frac": c["irrelevant"] / tot if tot else 0.0,
                 "conflict": c["conflict"],
             }
-        return by_id
+        return by_id, len(by_id)
 
     phase3_scores = _resolve_path(
         args.phase3_scores_jsonl,
@@ -231,9 +241,9 @@ def run_report(args: argparse.Namespace) -> None:
         f"total={counts['phase5']['total']}"
     )
 
-    p3 = per_id_metrics(phase3_scores)
-    p4 = per_id_metrics(phase4_scores)
-    p5 = per_id_metrics(phase5_scores)
+    p3, n3 = per_id_metrics(phase3_scores)
+    p4, n4 = per_id_metrics(phase4_scores)
+    p5, n5 = per_id_metrics(phase5_scores)
     shared_ids = sorted(set(p3) & set(p4) & set(p5))
     n_ids = len(shared_ids)
 
@@ -242,46 +252,93 @@ def run_report(args: argparse.Namespace) -> None:
             return 0.0
         return sum(metrics[i][key] for i in shared_ids) / n_ids
 
+    def avg_all(metrics: dict[str, dict[str, float]], key: str) -> float:
+        if not metrics:
+            return 0.0
+        return sum(m[key] for m in metrics.values()) / len(metrics)
+
     phase3_macro = {
+        "support_frac": avg_all(p3, "support_frac"),
+        "conflict_frac": avg_all(p3, "conflict_frac"),
+        "irrelevant_frac": avg_all(p3, "irrelevant_frac"),
+    }
+    phase4_macro = {
+        "support_frac": avg_all(p4, "support_frac"),
+        "conflict_frac": avg_all(p4, "conflict_frac"),
+        "irrelevant_frac": avg_all(p4, "irrelevant_frac"),
+    }
+    phase5_macro = {
+        "support_frac": avg_all(p5, "support_frac"),
+        "conflict_frac": avg_all(p5, "conflict_frac"),
+        "irrelevant_frac": avg_all(p5, "irrelevant_frac"),
+    }
+
+    phase3_partial = sum(m["conflict"] > 0 for m in p3.values())
+    phase4_partial = sum(m["conflict"] > 0 for m in p4.values())
+    phase5_partial = sum(m["conflict"] > 0 for m in p5.values())
+
+    phase3_shared_macro = {
         "support_frac": avg(p3, "support_frac"),
         "conflict_frac": avg(p3, "conflict_frac"),
         "irrelevant_frac": avg(p3, "irrelevant_frac"),
     }
-    phase4_macro = {
+    phase4_shared_macro = {
         "support_frac": avg(p4, "support_frac"),
         "conflict_frac": avg(p4, "conflict_frac"),
         "irrelevant_frac": avg(p4, "irrelevant_frac"),
     }
-    phase5_macro = {
+    phase5_shared_macro = {
         "support_frac": avg(p5, "support_frac"),
         "conflict_frac": avg(p5, "conflict_frac"),
         "irrelevant_frac": avg(p5, "irrelevant_frac"),
     }
 
-    phase3_partial = sum(p3[i]["conflict"] > 0 for i in shared_ids)
-    phase4_partial = sum(p4[i]["conflict"] > 0 for i in shared_ids)
-    phase5_partial = sum(p5[i]["conflict"] > 0 for i in shared_ids)
+    phase3_shared_partial = sum(p3[i]["conflict"] > 0 for i in shared_ids)
+    phase4_shared_partial = sum(p4[i]["conflict"] > 0 for i in shared_ids)
+    phase5_shared_partial = sum(p5[i]["conflict"] > 0 for i in shared_ids)
 
     print(
-        "Phase 3 macro avg: "
+        f"Phase 3 macro avg (N={n3}): "
         f"support_frac={phase3_macro['support_frac']}, "
         f"conflict_frac={phase3_macro['conflict_frac']}, "
         f"irrelevant_frac={phase3_macro['irrelevant_frac']}, "
         f"partial_hallucinations={phase3_partial}"
     )
     print(
-        "Phase 4 macro avg: "
+        f"Phase 4 macro avg (N={n4}): "
         f"support_frac={phase4_macro['support_frac']}, "
         f"conflict_frac={phase4_macro['conflict_frac']}, "
         f"irrelevant_frac={phase4_macro['irrelevant_frac']}, "
         f"partial_hallucinations={phase4_partial}"
     )
     print(
-        "Phase 5 macro avg: "
+        f"Phase 5 macro avg (N={n5}): "
         f"support_frac={phase5_macro['support_frac']}, "
         f"conflict_frac={phase5_macro['conflict_frac']}, "
         f"irrelevant_frac={phase5_macro['irrelevant_frac']}, "
         f"partial_hallucinations={phase5_partial}"
+    )
+    print(f"Shared ids across all phases: N={n_ids}")
+    print(
+        "Shared-only macro avg (Phase 3): "
+        f"support_frac={phase3_shared_macro['support_frac']}, "
+        f"conflict_frac={phase3_shared_macro['conflict_frac']}, "
+        f"irrelevant_frac={phase3_shared_macro['irrelevant_frac']}, "
+        f"partial_hallucinations={phase3_shared_partial}"
+    )
+    print(
+        "Shared-only macro avg (Phase 4): "
+        f"support_frac={phase4_shared_macro['support_frac']}, "
+        f"conflict_frac={phase4_shared_macro['conflict_frac']}, "
+        f"irrelevant_frac={phase4_shared_macro['irrelevant_frac']}, "
+        f"partial_hallucinations={phase4_shared_partial}"
+    )
+    print(
+        "Shared-only macro avg (Phase 5): "
+        f"support_frac={phase5_shared_macro['support_frac']}, "
+        f"conflict_frac={phase5_shared_macro['conflict_frac']}, "
+        f"irrelevant_frac={phase5_shared_macro['irrelevant_frac']}, "
+        f"partial_hallucinations={phase5_shared_partial}"
     )
 
     report_path = Path("artifacts") / f"report_{args.tag}.jsonl"
@@ -291,20 +348,24 @@ def run_report(args: argparse.Namespace) -> None:
             "tag": args.tag,
             "ids_compared": n_ids,
             "phase3": {
+                "ids": n3,
                 "counts": counts["phase3"],
                 "macro_avg": phase3_macro,
                 "partial_hallucinations": phase3_partial,
             },
             "phase4": {
+                "ids": n4,
                 "counts": counts["phase4"],
                 "macro_avg": phase4_macro,
                 "partial_hallucinations": phase4_partial,
             },
             "phase5": {
+                "ids": n5,
                 "counts": counts["phase5"],
                 "macro_avg": phase5_macro,
                 "partial_hallucinations": phase5_partial,
             },
+            "shared_ids": n_ids,
         }
         handle.write(json.dumps(row, ensure_ascii=False))
         handle.write("\n")
