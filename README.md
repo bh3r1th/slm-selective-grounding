@@ -11,6 +11,27 @@ uv sync --dev
 pre-commit install
 ```
 
+## Sample100 Quickstart
+
+The sample contexts JSONL is gitignored; place it at `artifacts/contexts/asqa_train_k6_sample100.jsonl`.
+
+```bash
+python -m scripts.10_run_phases phase1 --contexts_jsonl artifacts/contexts/asqa_train_k6_sample100.jsonl --tag sample100
+python -m scripts.10_run_phases phase2 --tag sample100
+python -m scripts.10_run_phases phase3 --contexts_jsonl artifacts/contexts/asqa_train_k6_sample100.jsonl --tag sample100
+python -m scripts.10_run_phases phase4 --contexts_jsonl artifacts/contexts/asqa_train_k6_sample100.jsonl --tag sample100
+python -m scripts.10_run_phases phase5 --contexts_jsonl artifacts/contexts/asqa_train_k6_sample100.jsonl --tag sample100
+python -m scripts.10_run_phases report --tag sample100
+```
+
+Key outputs:
+- `artifacts/phase3_claim_scores_sample100.jsonl`
+- `artifacts/phase4_claim_scores_refusal_sample100.jsonl`
+- `artifacts/phase5_claim_scores_sample100.jsonl`
+- `artifacts/report_sample100.jsonl`
+
+Phase5 eliminates conflicts by claim-level filtering.
+
 ## Data flow
 
 ```
