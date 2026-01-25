@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use this code, please cite it as below."
+title: "Claim-Level Selective Grounding for Reducing Partial Hallucinations in Small Language Models"
+authors:
+  - family-names: Nunepalli
+    given-names: Bharath
+year: 2025
+url: "https://github.com/bh3r1th/slm-selective-grounding"
+license: MIT
+preferred-citation:
+  type: article
+  title: "Claim-Level Selective Grounding for Reducing Partial Hallucinations in Small Language Models"
+  authors:
+    - family-names: Nunepalli
+      given-names: Bharath
+  year: 2026
+  notes: "arXiv preprint "
